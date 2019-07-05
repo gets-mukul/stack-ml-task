@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <title>StackML task</title>
+    <meta charset=utf-8 />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+    <script src="https://stackml.com/library-js/stackml.min.js"></script> 
+    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.2/modernizr.js"></script>
+
+
+</head>
+<style type="text/css">
+    .no-js #loader { display: none;  }
+    .js #loader { display: block; position: absolute; left: 0; top: 0; }
+    .se-pre-con {
+        position: fixed;
+        left: 0px;
+        top: 0px;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        background: url(../images/loader.gif) center no-repeat #fff;
+    }
+</style>
+<body>
+    
+
+    <div class="container-fluid">       
+        <div class="se-pre-con row" id="loader" style="display:none"></div>
+        <h1>Censor my face</h1>
+
+        <div cass="row">
+
+            <div class="col-sm-6">
+                <input type='file' id="imgInp" class="btn btn-info" />
+            </div>
+            
+            <div class="col-sm-6">
+                <button type="button" class="btn btn-info btn-lg" data-toggle="modal" data-target="#myModal" id="censor-btn">Censor</button>
+                
+                <!-- Modal -->
+                <div class="modal fade" id="myModal" role="dialog">
+                    <div class="modal-dialog">
+
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                <h4 class="modal-title">Select Option</h4>
+                            </div>
+                            <div class="modal-body">
+                                <form>
+                                    <div class="radio">
+                                      <label><input type="radio" name="optradio" value="1" checked>LEVEL 1: Censor human face with neutral emoji.</label>
+                                    </div>
+                                    <div class="radio">
+                                      <label><input type="radio" name="optradio" value="3">LEVEL 3: Censor human face with expression emoji.</label>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal" id="modal-btn">Done</button>
+
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+        
+    <div class="row">
+
+        <div class="col-sm-6">
+            <img id="input_img" alt="input img"  style = "width:500px; height:400px;  margin:10px"/>
+        </div>
+
+        <div class="col-sm-6 opt_canvas">
+            <canvas id="output_img" style = "margin:10px; width:500px; height:400px">
+
+            </canvas>
+        </div>
+    </div>  
+</body>
+
+</html>
+
+<script type="text/javascript">
+
+    var APIKEY = '3d24d517933b3fe50e73273924fb13e1';
+
+    var allFaceCordinates = [];
+    
+    var EXPRESSION = {"surprised":"../images/surprised.png", 
+                      "sad":"../images/sad.png",
+                      "happy":"../images/happy.png", 
+                      "angry":"../images/angry.png",
+                      "neutral":"../images/neutral.png",
+                      "fearful":"../images/fearful.png",
+                      "disgusted":"../images/disgusted.png"};  
+
+    var  numberImagePath = '../images/';                          
+
+    async function getCensoredImage(level){
+
+        await stackml.init({'accessKeyId': APIKEY});
+
+        // load Face Landmark Detection model
+        const model = await stackml.faceExpression(callbackLoad);
+
+        model.detect(document.getElementById('input_img'), callbackPredict);
+
+        function callbackLoad() {
+            console.log('callback after face expression model is loaded!');
+        }
+
+        function callbackPredict(err, results) {
+            console.log(results);
+
+            if(results.outputs.length > 1){
+                model.draw(document.getElementById('output_img'), document.getElementById('input_img'), results);
+                swal({
+                  title: "Multiple faces recognized!!",
+                  text: "LEVEL 2 is incomplete",
+                  icon: "warning",
+                })
+                .then(() => {
+                    for(i=0;i<results.outputs.length; i++){
+                        var x = results["outputs"][i]["detection"].box.x;
+                        var y = results["outputs"][i]["detection"].box.y;
+                        var imgSrc = numberImagePath+''+(i+1)+'.png';
+                        var obj = {"x":x, "y":y, "imgSrc":imgSrc};
+                        allFaceCordinates.push(obj);
+                    }
+
+                    console.log(allFaceCordinates);
+                    var canvas = document.getElementById("output_img");
+                    var ctx = canvas.getContext("2d");
+                    for(i=0;  i<allFaceCordinates.length; i++){
+                        var image = new Image();
+                        image.src = allFaceCordinates[i].imgSrc;
+                            image.onload = function() {
+                                ctx.drawImage(image, allFaceCordinates[i].x, allFaceCordinates[i].y, 200, 200);
+                            };
+                    }
+                });
+            }
+            else{
+                model.draw(document.getElementById('output_img'), document.getElementById('input_img'), {});
+
+                if(level == 1 ){                    
+                    makeNeutralEmoji(results);    
+                }
+                else{
+                    makeExpressionEmoji(results);  
+                }
+            }
+            $('#loader').hide();
+        }
+
+        function makeNeutralEmoji(results){
+            console.log("making multiple faces emoji");
+
+            var x = results["outputs"][0]["detection"].box.x;
+            var y = results["outputs"][0]["detection"].box.y;
+            var width = results["outputs"][0]["detection"].box.width;
+            var height = results["outputs"][0]["detection"].box.height;
+            var canvas = document.getElementById("output_img");
+            var ctx = canvas.getContext("2d");
+            var image = new Image();
+            image.src = EXPRESSION.neutral;
+            image.onload = function() {
+                ctx.drawImage(image, x, y, width, height);
+            };
+            console.log("making multiplefaces emoji done");
+        }
+
+        function makeExpressionEmoji(results){
+            console.log("making expression emoji");
+
+            var x = results["outputs"][0]["detection"].box.x;
+            var y = results["outputs"][0]["detection"].box.y;
+            var width = results["outputs"][0]["detection"].box.width;
+            var height = results["outputs"][0]["detection"].box.height;
+            var expression = "";
+            var probability = 0;
+
+            for(var j=0; j<results["outputs"][0]["expressions"].length; j++){
+
+                if(probability == 1){
+                    expression = results["outputs"][0]["expressions"][j].expression;
+                    break;
+                }
+                else if(probability < results["outputs"][0]["expressions"][j].probability){
+                    probability = results["outputs"][0]["expressions"][j].probability;
+                    expression = results["outputs"][0]["expressions"][j].expression;
+                }
+
+            }
+
+            var canvas = document.getElementById("output_img");
+            var ctx = canvas.getContext("2d");
+            var image = new Image();
+            image.src = "../images/"+expression+".png";
+            image.onload = function() {
+                ctx.drawImage(image, x, y, width, height);
+            };
+
+            console.log("expression emoji done");
+        }
+    }                  
+
+    $("#imgInp").change(function() {
+        readURL(this);
+    });
+
+    function readURL(input) {
+        if (input.files && input.files[0]) {
+            var reader = new FileReader();
+
+            reader.onload = function (e) {
+                $('#input_img')
+                .attr('src', e.target.result);
+            };
+
+            reader.readAsDataURL(input.files[0]);
+        }
+    } 
+
+    $("#modal-btn").click(function (e) {
+        $('#loader').show();
+        var checked_option_radio = $('input:radio[name=optradio]:checked').val();
+        getCensoredImage(checked_option_radio);
+        
+    });
+ 
+</script>
